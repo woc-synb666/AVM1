@@ -131,3 +131,36 @@ python -m avm.image <image.json>     # 加载并运行系统镜像
 ```bash
 pytest tests/                        # 全部（MockLMU，不调真实 API）
 ```
+
+---
+
+## 本工作区的实际状态（接手前必读）
+
+这个目录不是上游的原始快照，而是 **`woc-synb666/AVM1` 的 `dev` 分支**，
+当前 `b18f432`，已经包含了作者（上游 `tlozttok/AVM1`）之外的一次完整重构。
+
+**动手前先读 [`REFACTOR-NOTES.md`](./REFACTOR-NOTES.md)** —— 里面记了：
+- 实测出的真问题（不是「函数太长」，是 271 处跨模块私有字段访问 + 3 对循环依赖）
+- **判定标准**：什么样的方法该拆出去、什么样的坚决不拆（这条最重要，不看会拆错）
+- 四步推进的具体做法与提交对应关系
+- 三道验证关（pytest / 装载指纹 / 真启动冒烟）
+- 同步上游时哪一处**故意放弃**了本地重构（`model_catalog`），为什么
+- 已知遗留项，以及为什么它们是有意留下的
+
+**跑起来**（Windows，本机已配好 DeepSeek）：
+
+```
+双击 启动AVM控制台.cmd   →   http://127.0.0.1:8700
+```
+
+凭证是每次启动随机生成的，看窗口里那行「面板凭证」，
+同时写到 `images/local/out/console.token`。
+
+**跑测试**要用带 `openai` 的解释器，本机是：
+
+```bash
+"C:/Users/Lenovo/AppData/Local/Programs/Python/Python312/python.exe" -m pytest -q
+```
+
+改代码之前先跑一次全量测试 + `fingerprint_image.py` 留基线，改完再对比 ——
+这个仓库的定位是「行为完全不变」，没有指纹对比就等于没验证。
