@@ -484,6 +484,9 @@ class Core:
         self.mem: Memory = Memory()
         self._executors: Dict[int, Executor] = {}  # cid → PLM 执行器（Python 对话；PLM 状态跨轮次保留）
         self._finished: set = set()  # 已关闭（个体结束）的对话 cid；记录供监测/信息设备展示
+        # 快照恢复时"父是保留对话（面板 cid=-1）"的子对话：面板由宿主在恢复之后才建，
+        # 这批 cid 先寄存，等 bind_console_conversation 建好面板再挂父。
+        self._pending_panel_children: List[int] = []
         self._instruction_budget: int = 50  # 每次激活的指令预算（核心中断阈值）
         self._activation_instructions: int = 0
         self.image_dir: Optional[str] = None  # 调试用：镜像目录（检查点默认路径）
@@ -1767,6 +1770,14 @@ class Core:
         conv = self.ensure_operator_conversation(para_ref)
         conv.para_ref = para_ref or self.para_ref
         self._executors[conv.cid] = self.services.plm.create_executor("plm.operator", channel=channel)
+        # 快照恢复时以保留对话为父的对话先寄存了 cid（见 snapshot._rebuild_conversations）：
+        # 面板对话不写进快照，所以在恢复那一刻它还不存在。这里面板已经建好，补绑回去，
+        # 否则那些对话会永远没有父——亚对话返回、链判定都依赖于父。
+        for cid in self._pending_panel_children:
+            child = self._conv_by_cid.get(cid)
+            if child is not None and child.parent is None:
+                child.parent = conv
+        self._pending_panel_children.clear()
         return conv
 
     # ------------------------------------------------------------------

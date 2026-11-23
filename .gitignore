@@ -15,3 +15,7 @@ web/playwright-report/
 
 # 持久运行镜像的落点（journal / snapshot / mem 写回）
 images/base/out/
+images/local/out/
+
+# 本地会话记录（体积大，且含本机路径/凭证痕迹，不入库）
+.workbuddy/

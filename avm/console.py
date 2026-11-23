@@ -1202,11 +1202,29 @@ class _ConsoleHandler(BaseHTTPRequestHandler):
     def _error(self, code: int, message: str):
         self._send_json(code, {"error": message})
 
+    def _read_raw_body(self) -> bytes:
+        """读全请求体并缓存，一个请求只读一次。
+
+        必须在任何提前 return 之前调用（`_guard` 就在 do_POST 的第一行）：鉴权或
+        席位校验失败时会直接回 401/409 而不进分发，此时 body 若还留在 socket 里，
+        keep-alive 连接上下一个请求的请求行就会接在这段 body 后面，被解析成
+        `{"client_id":"..."}GET /assets/x.css HTTP/1.1` 这样的畸形请求——浏览器
+        看到的是 501，静态资源（尤其 CSS）随机加载失败。
+        """
+        raw = getattr(self, "_raw_body", None)
+        if raw is None:
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                length = 0
+            raw = self.rfile.read(length) if length > 0 else b""
+            self._raw_body = raw
+        return raw
+
     def _body(self) -> dict:
-        length = int(self.headers.get("Content-Length") or 0)
-        if length <= 0:
+        raw = self._read_raw_body()
+        if not raw:
             return {}
-        raw = self.rfile.read(length)
         try:
             parsed = json.loads(raw.decode("utf-8"))
         except ValueError as e:
@@ -1303,6 +1321,12 @@ class _ConsoleHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         path = urlparse(self.path).path
         console = self.console
+        # 每个请求重新读一次：handler 实例在 keep-alive 连接上会被复用，缓存不能
+        # 跨请求——否则第二个请求命中上一个请求的缓存，就以为 body 已经读过而不再
+        # 读 socket，残留 body 又变成畸形请求。这里连同 _guard 失败提前 return 的
+        # 情形一起覆盖（见 _read_raw_body）。
+        self._raw_body = None
+        self._read_raw_body()
         if self._guard(path):
             return
         try:

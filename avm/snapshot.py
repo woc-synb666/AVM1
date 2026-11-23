@@ -324,6 +324,13 @@ def _rebuild_conversations(core, doc: dict) -> None:
         conv = core.get_conversation(brief["cid"])
         parent = core.get_conversation(parent_cid)
         if parent is None:
+            if isinstance(parent_cid, int) and parent_cid < 0:
+                # 保留对话（面板 cid=PANEL_CID）是宿主对象，不写进快照：它在恢复之后
+                # 由 bind_console_conversation 建出来。以它为父的对话先寄存 cid，
+                # 等面板建好再补绑；这里不能当损坏报错，否则"用面板建的对话 + 正常关机"
+                # 会让下一次启动直接失败。
+                core._pending_panel_children.append(conv.cid)
+                continue
             raise SnapshotError(
                 f"对话 {brief['cid']} 的父对话 cid={parent_cid} 不在快照里"
             )
